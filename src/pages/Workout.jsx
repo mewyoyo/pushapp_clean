@@ -10,62 +10,117 @@ export default function WorkoutPage() {
   const [videoBlob, setVideoBlob] = useState(null);
   const [uploadFile, setUploadFile] = useState(null);
   const [error, setError] = useState('');
-  const [previewReady, setPreviewReady] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+
   const videoRef = useRef();
-  const previewRef = useRef();
   const mediaRecRef = useRef();
   const streamRef = useRef();
   const chunksRef = useRef([]);
   const fileRef = useRef();
 
-  // Request camera stream on mount — previewRef is always in DOM now so attach directly
+  // Включаем камеру сразу при входе на страницу
   useEffect(() => {
     let cancelled = false;
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
-      .then(stream => {
-        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
-        streamRef.current = stream;
-        if (previewRef.current) {
-          previewRef.current.srcObject = stream;
-          previewRef.current.play().catch(() => {});
-          setPreviewReady(true);
+
+    async function setupCamera() {
+      setError('');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user' }, 
+          audio: false 
+        });
+        
+        if (cancelled) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
         }
-      })
-      .catch(err => { console.error('CAMERA ERROR:', err.name, err.message); });
-    return () => { cancelled = true; stopStream(); };
+
+        streamRef.current = stream;
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.muted = true; 
+          videoRef.current.play().then(() => {
+            setCameraReady(true);
+          }).catch(err => {
+            console.error("Video play failed:", err);
+          });
+        }
+      } catch (e) {
+        console.error("Camera access denied:", e);
+        setError('Не удалось получить доступ к камере. Разрешите доступ в браузере для использования AI.');
+        setCameraReady(false);
+      }
+    }
+
+    setupCamera();
+
+    return () => {
+      cancelled = true;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+      }
+    };
   }, []);
 
-  function stopStream() {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
+  // Старт тренировки и перезапуск стрима с аудио для записи
+  async function startWorkout() {
+    if (!cameraReady || !streamRef.current) {
+      setError('Камера ещё не готова. Подождите секунду.');
+      return;
     }
-  }
 
-  async function startRecording() {
-    setError('');
+    setPushupCount(0);
+    chunksRef.current = [];
+    
     try {
-      // Get a new stream with audio for recording (stop silent preview stream first)
-      stopStream();
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      streamRef.current = stream;
-      videoRef.current.srcObject = stream;
-      videoRef.current.play();
-      chunksRef.current = [];
-      const rec = new MediaRecorder(stream);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+      }
+
+      const recordingStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'user' }, 
+        audio: true 
+      });
+
+      streamRef.current = recordingStream;
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = recordingStream;
+        videoRef.current.muted = true; 
+        videoRef.current.play();
+      }
+
+      const rec = new MediaRecorder(recordingStream);
       mediaRecRef.current = rec;
       rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       rec.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: 'video/webm' });
         setVideoBlob(blob);
-        stopStream();
+        restorePreviewStream();
         simulateAI();
       };
+      
       rec.start();
       setPhase('recording');
     } catch (e) {
-      setError('Не удалось получить доступ к камере. Разрешите доступ в браузере.');
+      console.error(e);
+      setError('Ошибка при запуске записи.');
     }
+  }
+
+  async function restorePreviewStream() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch (e) { console.error(e); }
   }
 
   function stopRecording() {
@@ -119,78 +174,94 @@ export default function WorkoutPage() {
 
   return (
     <div className="workout-page">
-      <div className="workout-header">
-        <div className="workout-title">ТРЕНИРОВКА</div>
-        <div className="workout-subtitle">Запиши или загрузи видео с отжиманиями</div>
-      </div>
-
-      {/* Preview video always mounted so ref is available before getUserMedia resolves */}
-      <div className="workout-camera-container" style={{ display: phase === 'idle' ? 'flex' : 'none' }}>
-        <video
-          ref={previewRef}
-          className={`workout-bg-camera${previewReady ? ' ready' : ''}`}
-          muted
-          playsInline
-        />
-        {!previewReady && <div className="workout-camera-placeholder" />}
-
-        <div className="workout-actions">
-          <div className="workout-card camera-card" onClick={startRecording}>
-            <div className="wcard-icon">🎥</div>
-            <div className="wcard-title">Начать запись</div>
-            <div className="wcard-desc">Запроси доступ к камере и запиши тренировку</div>
+      <div className="workout-container">
+        
+        {/* Камера всегда на фоне (для фаз idle и recording) */}
+        {(phase === 'idle' || phase === 'recording') && (
+          <div className="camera-view-port">
+            <video 
+              ref={videoRef} 
+              className={`workout-video-stream${cameraReady ? ' ready' : ''}`}
+              muted 
+              playsInline 
+            />
+            {!cameraReady && !error && (
+              <div className="camera-loading">
+                <div className="spinner"></div>
+                Включение камеры...
+              </div>
+            )}
+            {error && <div className="workout-error-overlay">{error}</div>}
           </div>
-          <div className="workout-card upload-card" onClick={() => fileRef.current.click()}>
-            <div className="wcard-icon">📁</div>
-            <div className="wcard-title">Загрузить видео</div>
-            <div className="wcard-desc">Выбери готовое видео с устройства</div>
-            <input ref={fileRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={handleFileUpload} />
-          </div>
-          {error && <div className="workout-error">{error}</div>}
-        </div>
-      </div>
+        )}
 
-      {phase === 'recording' && (
-        <div className="recording-view">
-          <div className="video-preview-wrap">
-            <video ref={videoRef} className="video-preview" muted playsInline />
-            <div className="rec-badge">⏺ REC</div>
-          </div>
-          <div className="rec-hint">Отжимайся перед камерой</div>
-          <button className="btn-stop" onClick={stopRecording}>⏹ Завершить запись</button>
-        </div>
-      )}
-
-      {phase === 'processing' && (
-        <div className="processing-view">
-          <div className="processing-anim">🤖</div>
-          <div className="processing-title">ИИ считает отжимания...</div>
-          <div className="processing-dots">
-            <span /><span /><span />
-          </div>
-        </div>
-      )}
-
-      {phase === 'result' && (
-        <div className="result-view">
-          <div className="result-count-wrap">
-            <div className="result-label">Обнаружено отжиманий</div>
-            <div className="result-count">{pushupCount}</div>
-          </div>
-          <div className="result-toggle-row" onClick={() => setMakePublic(v => !v)}>
-            <div className="result-toggle-text">
-              <span className="result-toggle-label">Опубликовать видео</span>
-              <span className="result-toggle-sub">Все смогут увидеть в ленте</span>
+        {/* Слой UI поверх камеры */}
+        {(phase === 'idle' || phase === 'recording') && (
+          <div className={`workout-ui-overlay ${phase}`}>
+            
+            <div className="workout-stats-overlay">
+              <div className="stats-label">TOTAL PUSH-UPS:</div>
+              <div className="stats-counter">{pushupCount}</div>
             </div>
-            <div className={`toggle${makePublic ? ' active' : ''}`} />
-          </div>
-          <button className="btn-orange full" onClick={handlePublish}>Сохранить тренировку</button>
-          <button className="btn-ghost full" style={{ marginTop: 10 }} onClick={() => setPhase('idle')}>Отмена</button>
-        </div>
-      )}
 
-      {/* hidden video element for camera phase */}
-      {phase !== 'recording' && <video ref={videoRef} style={{ display: 'none' }} />}
+            <div className="workout-actions-bottom">
+              {phase === 'idle' && (
+                <>
+                  <div className="upload-alt" onClick={() => fileRef.current.click()}>
+                    или загрузить готовое видео 📁
+                    <input ref={fileRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={handleFileUpload} />
+                  </div>
+                  <button 
+                    className="btn-start-workout" 
+                    onClick={startWorkout}
+                    disabled={!cameraReady}
+                  >
+                    START WORKOUT
+                  </button>
+                </>
+              )}
+
+              {phase === 'recording' && (
+                <button className="btn-stop-workout" onClick={stopRecording}>
+                  STOP WORKOUT
+                </button>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {/* Обработка ИИ */}
+        {phase === 'processing' && (
+          <div className="processing-view">
+            <div className="processing-anim">🤖</div>
+            <div className="processing-title">ИИ считает отжимания...</div>
+            <div className="processing-dots"><span /><span /><span /></div>
+          </div>
+        )}
+
+        {/* Красивый экран результатов */}
+        {phase === 'result' && (
+          <div className="result-view">
+            <div className="result-count-wrap">
+              <div className="result-label">Обнаружено отжиманий</div>
+              <div className="result-count">{pushupCount}</div>
+            </div>
+            
+            <div className="result-toggle-row" onClick={() => setMakePublic(v => !v)}>
+              <div className="result-toggle-text">
+                <span className="result-toggle-label">Опубликовать видео</span>
+                <span className="result-toggle-sub">Все смогут увидеть в ленте</span>
+              </div>
+              <div className={`toggle${makePublic ? ' active' : ''}`} />
+            </div>
+            
+            <button className="btn-orange full" onClick={handlePublish}>Сохранить тренировку</button>
+            <button className="btn-ghost full" onClick={() => setPhase('idle')}>Отмена</button>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
