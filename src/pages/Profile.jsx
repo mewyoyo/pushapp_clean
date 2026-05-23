@@ -219,20 +219,22 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <div className="profile-section" style={{ padding: '0 16px' }}>
-        <div className="section-title">Stats</div>
-        <div className="section-subtitle">All time</div>
-        <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 8 }}>
-          <StatCard label="Push-ups" value={currentUser.stats?.totalPushups || 0} />
-          <StatCard label="Best set" value={currentUser.stats?.maxPushups || 0} />
-          <StatCard label="Likes" value={currentUser.stats?.likes || 0} />
+      {currentUser.showStats !== false && (
+        <div className="profile-section" style={{ padding: '0 16px' }}>
+          <div className="section-title">Stats</div>
+          <div className="section-subtitle">All time</div>
+          <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 8 }}>
+            <StatCard label="Push-ups" value={currentUser.stats?.totalPushups || 0} />
+            <StatCard label="Best set" value={currentUser.stats?.maxPushups || 0} />
+            <StatCard label="Likes" value={currentUser.stats?.likes || 0} />
+          </div>
+          <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+            <StatCard label="Streak" value={currentUser.stats?.currentStreak || 0} />
+            <StatCard label="Best streak" value={currentUser.stats?.longestStreak || 0} />
+            <StatCard label="Followers" value={followerUsers.length} />
+          </div>
         </div>
-        <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-          <StatCard label="Streak" value={currentUser.stats?.currentStreak || 0} />
-          <StatCard label="Best streak" value={currentUser.stats?.longestStreak || 0} />
-          <StatCard label="Followers" value={followerUsers.length} />
-        </div>
-      </div>
+      )}
 
       <div className="profile-section" style={{ padding: '0 16px' }}>
         <div className="section-title" style={{ marginBottom: 8 }}>Activity</div>
