@@ -110,16 +110,20 @@ function WorkoutCard({ workout, onLike, onViewProfile }) {
   return (
     <div className="feed-card">
       <div className="feed-card-header" onClick={() => onViewProfile(workout.userId)}>
-        <div className="feed-avatar">
-          {workout.avatar ? <img src={workout.avatar} alt="" /> : <span>{(workout.username || '?')[0].toUpperCase()}</span>}
-        </div>
-        <div className="feed-user-info">
-          <div className="feed-username-row">
-            <span className="feed-username">{workout.username}</span>
-            {streakNum > 0 && <span className="feed-streak-badge">🔥 {streakNum}</span>}
+
+        <div className="feed-card-header-left">
+          <div className="feed-avatar">
+            {workout.avatar ? <img src={workout.avatar} alt="" /> : <span>{(workout.username || '?')[0].toUpperCase()}</span>}
           </div>
-          <span className="feed-workout-type">Push-Ups · {timeStr}</span>
+          <div className="feed-user-info">
+            <div className="feed-username-row">
+              <span className="feed-username">{workout.username}</span>
+              {streakNum > 0 && <span className="feed-streak-badge">🔥 {streakNum}</span>}
+            </div>
+            <span className="feed-workout-type">Push-Ups · {timeStr}</span>
+          </div>
         </div>
+        
         {!isMe && (
           <button className={`feed-follow-btn${following ? ' following' : ''}`} onClick={handleFollow}>
             {following ? '✓' : '+'}

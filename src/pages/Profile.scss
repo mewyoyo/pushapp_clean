@@ -90,10 +90,22 @@
   color: var(--text);
 }
 
+.profile-follow-counts {
+  display: flex;
+  gap: 10px;
+}
+
 .profile-follow-counts-row {
   display: flex;
   gap: 20px;
   span { font-size: 13px; color: var(--text2); b { color: var(--text); } }
+}
+
+.profile-name-block {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding-bottom: 16px;
 }
 
 .profile-name-block-center {
