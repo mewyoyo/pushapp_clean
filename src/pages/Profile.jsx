@@ -163,10 +163,7 @@ export default function ProfilePage() {
       <div className="profile-info-card">
         <div className="profile-info-left">
           <h2 className="profile-username">{currentUser.username}</h2>
-          <div className="profile-follow-counts-row">
-            <span><b>{followingUsers.length}</b> following</span>
-            <span><b>{followerUsers.length}</b> followers</span>
-          </div>
+          
         </div>
       </div>
 
