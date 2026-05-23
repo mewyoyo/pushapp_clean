@@ -1,0 +1,272 @@
+.workout-page {
+  width: 100%;
+  height: calc(100vh - 70px);
+  background-color: #000;
+  display: flex;
+  flex-direction: column;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+}
+
+.workout-container {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Слой камеры сзади */
+.camera-view-port {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  background-color: #1a1a1a;
+
+  .workout-video-stream {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+
+    &.ready {
+      opacity: 1;
+    }
+  }
+}
+
+.camera-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: #aaaaaa;
+  font-size: 14px;
+
+  .spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: #ff5733;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+}
+
+/* Слой интерфейса поверх видео */
+.workout-ui-overlay {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.8) 100%);
+  pointer-events: none;
+
+  .workout-stats-overlay {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+
+  /* Прячем счетчик в состоянии ожидания */
+  &.idle {
+    .workout-stats-overlay {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+  }
+
+  /* Показываем во время записи */
+  &.recording {
+    .workout-stats-overlay {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+.workout-actions-bottom {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+  margin-bottom: 20px;
+}
+
+.workout-stats-overlay {
+  text-align: center;
+  margin-top: 40px;
+
+  .stats-label {
+    font-size: 16px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.7);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .stats-counter {
+    font-size: 72px;
+    font-weight: 900;
+    color: #00e5bc;
+    margin-top: 8px;
+    text-shadow: 0 0 20px rgba(0, 229, 188, 0.5);
+  }
+}
+
+.upload-alt {
+  color: rgba(255,255,255,0.8);
+  font-size: 14px;
+  margin-bottom: 20px;
+  cursor: pointer;
+  text-decoration: underline;
+  &:hover { color: #fff; }
+}
+
+.btn-start-workout {
+  width: 100%;
+  max-width: 400px;
+  background-color: #ff5733;
+  color: #ffffff;
+  border: none;
+  border-radius: 16px;
+  padding: 20px;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(255, 87, 51, 0.4);
+  transition: all 0.2s;
+
+  &:disabled {
+    background-color: #555;
+    color: #aaa;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+.btn-stop-workout {
+  width: 100%;
+  max-width: 400px;
+  background-color: #ff3333;
+  color: #ffffff;
+  border: none;
+  border-radius: 16px;
+  padding: 20px;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(255, 51, 51, 0.4);
+}
+
+.workout-error-overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background-color: rgba(0,0,0,0.9);
+  color: #ff5252;
+  display: flex; justify-content: center; align-items: center;
+  padding: 40px; text-align: center; z-index: 5;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Экран обработки и результатов */
+.processing-view, .result-view, .workout-success {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #0b0b0b; z-index: 10;
+  display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 24px; box-sizing: border-box;
+}
+
+.processing-anim { font-size: 64px; margin-bottom: 16px; }
+.processing-title { font-size: 20px; font-weight: 600; }
+.processing-dots { display: flex; gap: 4px; margin-top: 10px; span { width:8px; height:8px; background:#ff5733; border-radius:50%; animation: blink 1.4s infinite both; &:nth-child(2){animation-delay:0.2s} &:nth-child(3){animation-delay:0.4s} } }
+
+/* СТИЛИ ЭКРАНА РЕЗУЛЬТАТОВ (БЕЗ СЛИПАНИЯ И С ОТСТУПАМИ) */
+.result-view {
+  .result-count-wrap {
+    margin-bottom: 40px;
+
+    .result-label {
+      font-size: 16px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.6);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .result-count {
+      font-size: 80px;
+      font-weight: 900;
+      color: #ff5733;
+      margin: 10px 0 0 0;
+      line-height: 1;
+    }
+  }
+
+  .result-toggle-row {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255,255,255,0.05);
+    padding: 16px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background 0.2s;
+
+    &:hover { background: rgba(255,255,255,0.08); }
+
+    .result-toggle-text {
+      display: flex;
+      flex-direction: column;
+      text-align: left;
+      gap: 6px;
+
+      .result-toggle-label {
+        font-size: 16px;
+        font-weight: 600;
+        color: #ffffff;
+      }
+
+      .result-toggle-sub {
+        font-size: 12px;
+        font-weight: 400;
+        color: rgba(255,255,255,0.5);
+        line-height: 1.4; // Текст больше не слипается!
+      }
+    }
+
+    .toggle {
+      width: 50px; height: 28px; background-color: #333; border-radius: 14px; position: relative; transition: background-color 0.2s; flex-shrink: 0;
+      &::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; background-color: #ffffff; border-radius: 50%; transition: transform 0.2s; }
+      &.active { background-color: #ff5733; &::after { transform: translateX(22px); } }
+    }
+  }
+
+  .btn-orange {
+    background: #ff5733; color: white; border: none; padding: 18px; border-radius: 12px; font-weight: 700; font-size: 16px; width: 100%; max-width: 400px; cursor: pointer; transition: opacity 0.2s;
+    &:active { opacity: 0.9; }
+  }
+
+  .btn-ghost {
+    background: transparent; color: #aaa; border: 1px solid #333; padding: 16px; border-radius: 12px; font-size: 16px; width: 100%; max-width: 400px; cursor: pointer; margin-top: 12px;
+    &:hover { background: rgba(255,255,255,0.03); color: white;}
+  }
+}
+
+.success-icon { font-size: 64px; margin-bottom: 16px; }
+.success-title { font-size: 28px; font-weight: 800; color: #00e5bc; }
+
+@keyframes blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
