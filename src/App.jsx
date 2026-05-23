@@ -83,10 +83,10 @@ function AppShell() {
       </main>
 
       <nav className="bottom-nav">
-        <NavIcon path="/" icon={<HomeIcon />} label="Лента" />
-        <NavIcon path="/search" icon={<SearchIcon />} label="Поиск" />
-        <NavIcon path="/workout" icon={<CameraIcon />} label="Запись" />
-        <NavIcon path="/profile" icon={<ProfileIcon />} label="Профиль" />
+        <NavIcon path="/" icon={<HomeIcon />} label="Feed" />
+        <NavIcon path="/search" icon={<SearchIcon />} label="Search" />
+        <NavIcon path="/workout" icon={<CameraIcon />} label="Record" />
+        <NavIcon path="/profile" icon={<ProfileIcon />} label="Profile" />
       </nav>
     </div>
   );
