@@ -214,7 +214,6 @@
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Экран обработки и результатов */
 .processing-view, .result-view, .workout-success {
   position: absolute;
   top: 0;
@@ -336,9 +335,6 @@
 .success-icon { font-size: 64px; margin-bottom: 16px; }
 .success-title { font-size: 28px; font-weight: 800; color: #00e5bc; }
 
-<<<<<<< Updated upstream
-@keyframes blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
-=======
 @keyframes blink { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
 .stats-streak {
   font-size: 14px;
@@ -375,4 +371,3 @@
     &::after { transform: translateX(20px); background: white; }
   }
 }
->>>>>>> Stashed changes
