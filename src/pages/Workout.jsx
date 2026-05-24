@@ -39,27 +39,64 @@ export default function WorkoutPage() {
   const lastRepTimeRef = useRef(0);
   const lastSpeechRef = useRef('');
   const voiceCooldownRef = useRef(0);
+  const errorCooldownRef = useRef(0);
+  const motivationCooldownRef = useRef(0);
 
-  const speak = (text) => {
+  const gogginsPhrases = [
+    "Who's gonna carry the boats and the logs?!",
+    "They don't know me son!",
+    "Stay hard!",
+    "You're not gonna like me!",
+    "Keep pushing!",
+    "Go to the hurt locker!",
+    "Suffer, this is victory!",
+    "The only easy day was yesterday!"
+  ];
+
+  const speakCount = (count) => {
+    // Озвучка счета - БЕЗ кулдаунов, ПРИОРИТЕТ
+    if (!('speechSynthesis' in window)) return;
+    const text = String(count);
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 1.2;
+    window.speechSynthesis.cancel(); // Отменяем предыдущую озвучку
+    window.setTimeout(() => {
+      window.speechSynthesis.speak(utterance);
+    }, 0);
+  };
+
+  const speakError = (text) => {
+    // Озвучка ошибок - с кулдауном 15 сек
     if (!text || !('speechSynthesis' in window)) return;
     const now = Date.now();
-    if (now - voiceCooldownRef.current < 3000) return;
-    if (lastSpeechRef.current === text) return;
-    voiceCooldownRef.current = now;
-    lastSpeechRef.current = text;
+    if (now - errorCooldownRef.current < 15000) return; // 15 сек кулдаун
+    errorCooldownRef.current = now;
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
     utterance.rate = 1.0;
-    utterance.onend = () => {
-      if (lastSpeechRef.current === text) {
-        lastSpeechRef.current = '';
-      }
-    };
-
     window.setTimeout(() => {
       window.speechSynthesis.speak(utterance);
     }, 0);
+  };
+
+  const speakMotivation = (count) => {
+    // Мотивационные фразы каждые 5 отжиманий (5, 10, 15...)
+    if (!('speechSynthesis' in window)) return;
+    if (count % 5 !== 0) return; // Только на 5, 10, 15...
+    
+    const now = Date.now();
+    if (now - motivationCooldownRef.current < 1000) return; // Минимум 1 сек между озвучками
+    motivationCooldownRef.current = now;
+
+    const phrase = gogginsPhrases[Math.floor(Math.random() * gogginsPhrases.length)];
+    const utterance = new SpeechSynthesisUtterance(phrase);
+    utterance.lang = 'en-US';
+    utterance.rate = 1.0;
+    window.setTimeout(() => {
+      window.speechSynthesis.speak(utterance);
+    }, 500); // Небольшая задержка, чтобы не перекрывать озвучку счета
   };
 
   useEffect(() => {
@@ -111,7 +148,26 @@ export default function WorkoutPage() {
 
       const allConnections = window.POSE_CONNECTIONS;
       if (window.drawConnectors && window.drawLandmarks) {
-        window.drawConnectors(canvasCtx, landmarks, allConnections, { color: isBackStraight ? '#00FF00' : '#ffffffaa', lineWidth: 2 });
+        if (isBackStraight) {
+          // При правильной позе - всё зелёное
+          window.drawConnectors(canvasCtx, landmarks, allConnections, { color: '#00FF00', lineWidth: 2 });
+        } else {
+          // При неправильной позе - спина красная и толще, остальное белое
+          const spineConnections = allConnections.filter(conn => {
+            const [start, end] = conn;
+            // Спина: 11-23 (левое плечо - левое бедро) и 12-24 (правое плечо - правое бедро)
+            return (start === 11 && end === 23) || (start === 12 && end === 24);
+          });
+          const otherConnections = allConnections.filter(conn => {
+            const [start, end] = conn;
+            return !((start === 11 && end === 23) || (start === 12 && end === 24));
+          });
+          
+          // Рисуем остальные соединения белым
+          window.drawConnectors(canvasCtx, landmarks, otherConnections, { color: '#ffffffaa', lineWidth: 2 });
+          // Рисуем спину красным и толще
+          window.drawConnectors(canvasCtx, landmarks, spineConnections, { color: '#FF0000', lineWidth: 5 });
+        }
         window.drawLandmarks(canvasCtx, landmarks.filter((_, index) => index >= 11), { color: '#ffffff', lineWidth: 2, radius: 4 });
       }
       const elbowAngle = calculateAngle(shoulder, elbow, wrist);
@@ -132,14 +188,15 @@ export default function WorkoutPage() {
             stageRef.current = 'top';
             countRef.current += 1;
             setPushupCount(countRef.current);
-            speak(`${countRef.current}`);
+            speakCount(countRef.current); // Озвучка счета МГНОВЕННО
+            speakMotivation(countRef.current); // Мотивационные фразы каждые 5
           }
         }
       } else {
         if (!warningRef.current) {
           warningRef.current = true;
           setWarning(true);
-          speak('Please straighten your back.');
+          speakError('Please straighten your back.'); // Озвучка ошибок с кулдауном
         }
       }
     }
@@ -242,7 +299,7 @@ export default function WorkoutPage() {
       };
       rec.start();
       setPhase('recording');
-      speak('Workout started.');
+      speakCount('Workout started'); // Озвучка старта
     } catch (e) {
       console.error(e);
       setError('Failed to start recording.');
@@ -356,11 +413,6 @@ export default function WorkoutPage() {
                     START WORKOUT
                   </button>
                 </>
-              )}
-              {phase === 'recording' && (
-                <button className="btn-stop-workout" onClick={stopRecording}>
-                  STOP WORKOUT
-                </button>
               )}
               {phase === 'recording' && (
                 <button className="btn-stop-workout" onClick={stopRecording}>
