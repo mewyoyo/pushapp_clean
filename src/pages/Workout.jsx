@@ -2,17 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import './Workout.scss';
 
-// Голосовое сопровождение
-const speak = (text) => {
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'ru-RU';
-    utterance.rate = 1.2;
-    window.speechSynthesis.speak(utterance);
-  }
-};
-
 // Вычисление углов в суставах
 const calculateAngle = (a, b, c) => {
   const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
@@ -43,8 +32,33 @@ export default function WorkoutPage() {
   const poseRef = useRef(null);
   const requestAnimRef = useRef(null);
   const countRef = useRef(0);
-  const stageRef = useRef('up');
+  const stageRef = useRef('top');
   const warningRef = useRef(false);
+  const lastRepTimeRef = useRef(0);
+  const lastSpeechRef = useRef('');
+  const voiceCooldownRef = useRef(0);
+
+  const speak = (text) => {
+    if (!text || !('speechSynthesis' in window)) return;
+    const now = Date.now();
+    if (now - voiceCooldownRef.current < 3000) return;
+    if (lastSpeechRef.current === text) return;
+    voiceCooldownRef.current = now;
+    lastSpeechRef.current = text;
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 1.0;
+    utterance.onend = () => {
+      if (lastSpeechRef.current === text) {
+        lastSpeechRef.current = '';
+      }
+    };
+
+    window.setTimeout(() => {
+      window.speechSynthesis.speak(utterance);
+    }, 0);
+  };
 
   // Подключение и настройка MediaPipe Pose
   useEffect(() => {
@@ -85,55 +99,47 @@ export default function WorkoutPage() {
     if (results.poseLandmarks) {
       const landmarks = results.poseLandmarks;
 
-      // Рисуем базовые точки и соединения
-      if (window.drawConnectors && window.drawLandmarks) {
-        window.drawConnectors(canvasCtx, landmarks, window.POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 3 });
-        window.drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 2, radius: 4 });
-      }
-
       const nose = landmarks[0];
       const shoulder = landmarks[11];
       const elbow = landmarks[13];
       const wrist = landmarks[15];
       const hip = landmarks[23];
-      const knee = landmarks[25];
+      const ankle = landmarks[27];
 
-      // Вычисляем прямую осанку
-      const backAngle = calculateAngle(shoulder, hip, knee);
+      const backAngle = calculateAngle(shoulder, hip, ankle);
       const isBackStraight = backAngle > 160 && backAngle <= 180;
 
-      // ФИКС БАГА: Отрисовка всей спины (Линия 1: Плечо-Таз, Линия 2: Таз-Колено)
-      canvasCtx.beginPath();
-      canvasCtx.moveTo(shoulder.x * canvasElement.width, shoulder.y * canvasElement.height);
-      canvasCtx.lineTo(hip.x * canvasElement.width, hip.y * canvasElement.height);
-      canvasCtx.lineTo(knee.x * canvasElement.width, knee.y * canvasElement.height);
-      canvasCtx.lineWidth = 8;
-      canvasCtx.strokeStyle = isBackStraight ? '#00FF00' : '#FF0000'; // Зелёный или Жирный Красный
-      canvasCtx.stroke();
-
-      // Подсчет отжиманий
+      const allConnections = window.POSE_CONNECTIONS;
+      if (window.drawConnectors && window.drawLandmarks) {
+        window.drawConnectors(canvasCtx, landmarks, allConnections, { color: isBackStraight ? '#00FF00' : '#ffffffaa', lineWidth: 2 });
+        window.drawLandmarks(canvasCtx, landmarks.filter((_, index) => index >= 11), { color: '#ffffff', lineWidth: 2, radius: 4 });
+      }
       const elbowAngle = calculateAngle(shoulder, elbow, wrist);
-      const isDeepEnough = nose.y > elbow.y;
+      const isBottom = nose.y > elbow.y;
+      const now = Date.now();
 
       if (isBackStraight) {
         if (warningRef.current) {
           warningRef.current = false;
           setWarning(false);
         }
-        if (isDeepEnough && stageRef.current === 'up') {
-          stageRef.current = 'down';
+        if (isBottom && stageRef.current === 'top') {
+          stageRef.current = 'bottom';
         }
-        if (elbowAngle > 160 && stageRef.current === 'down') {
-          stageRef.current = 'up';
-          countRef.current += 1;
-          setPushupCount(countRef.current);
-          speak(countRef.current.toString());
+        if (elbowAngle > 160 && stageRef.current === 'bottom') {
+          if (now - lastRepTimeRef.current > 900) {
+            lastRepTimeRef.current = now;
+            stageRef.current = 'top';
+            countRef.current += 1;
+            setPushupCount(countRef.current);
+            speak(`${countRef.current}`);
+          }
         }
       } else {
         if (!warningRef.current) {
           warningRef.current = true;
           setWarning(true);
-          speak('Выпрями спину');
+          speak('Please straighten your back.');
         }
       }
     }
@@ -182,7 +188,7 @@ export default function WorkoutPage() {
         }
       } catch (e) {
         console.error("Camera access denied:", e);
-        setError('Не удалось получить доступ к камере.');
+        setError('Unable to access camera.');
         setCameraReady(false);
       }
     }
@@ -199,14 +205,16 @@ export default function WorkoutPage() {
 
   async function startWorkout() {
     if (!cameraReady || !streamRef.current) {
-      setError('Камера ещё не готова.');
+      setError('Camera is not ready yet.');
       return;
     }
 
     setPushupCount(0);
     setWarning(false);
     countRef.current = 0;
-    stageRef.current = 'up';
+    stageRef.current = 'top';
+    lastRepTimeRef.current = 0;
+    lastSpeechRef.current = '';
     warningRef.current = false;
     chunksRef.current = [];
     
@@ -239,10 +247,10 @@ export default function WorkoutPage() {
       
       rec.start();
       setPhase('recording');
-      speak('Тренировка началась');
+      speak('Workout started.');
     } catch (e) {
       console.error(e);
-      setError('Ошибка запуска записи.');
+      setError('Failed to start recording.');
     }
   }
 
@@ -300,10 +308,10 @@ export default function WorkoutPage() {
       <div className="workout-page">
         <div className="workout-success">
           <div className="success-icon">🏆</div>
-          <div className="success-title">{pushupCount} отжиманий!</div>
-          <p>Тренировка сохранена{makePublic ? ' и опубликована' : ''}!</p>
+          <div className="success-title">{pushupCount} push-ups!</div>
+          <p>Workout saved{makePublic ? ' and published' : ''}!</p>
           <button className="btn-orange" style={{ marginTop: 24, width: '100%', maxWidth: '400px' }} onClick={() => setPhase('idle')}>
-            Новая тренировка
+            New workout
           </button>
         </div>
       </div>
@@ -324,12 +332,12 @@ export default function WorkoutPage() {
             />
             <canvas ref={canvasRef} className="workout-video-canvas" />
 
-            {warning && <div className="warning-pill">ВЫПРЯМИ СПИНУ!</div>}
+            {warning && <div className="warning-pill">STRAIGHTEN YOUR BACK!</div>}
 
             {!cameraReady && !error && (
               <div className="camera-loading">
                 <div className="spinner"></div>
-                Включение камеры...
+                Starting camera...
               </div>
             )}
             {error && <div className="workout-error-overlay">{error}</div>}
@@ -348,7 +356,7 @@ export default function WorkoutPage() {
               {phase === 'idle' && (
                 <>
                   <div className="upload-alt" onClick={() => fileRef.current.click()}>
-                    или загрузить готовое видео 📁
+                    or upload a recorded video 📁
                     <input ref={fileRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={handleFileUpload} />
                   </div>
                   <button className="btn-start-workout" onClick={startWorkout} disabled={!cameraReady}>
@@ -370,7 +378,7 @@ export default function WorkoutPage() {
         {phase === 'processing' && (
           <div className="processing-view">
             <div className="processing-anim">🤖</div>
-            <div className="processing-title">ИИ считает отжимания...</div>
+            <div className="processing-title">AI is counting push-ups...</div>
             <div className="processing-dots"><span /><span /><span /></div>
           </div>
         )}
@@ -378,20 +386,20 @@ export default function WorkoutPage() {
         {phase === 'result' && (
           <div className="result-view">
             <div className="result-count-wrap">
-              <div className="result-label">Обнаружено отжиманий</div>
+              <div className="result-label">Detected push-ups</div>
               <div className="result-count">{pushupCount}</div>
             </div>
             
             <div className="result-toggle-row" onClick={() => setMakePublic(v => !v)}>
               <div className="result-toggle-text">
-                <span className="result-toggle-label">Опубликовать видео</span>
-                <span className="result-toggle-sub">Все смогут увидеть в ленте</span>
+                <span className="result-toggle-label">Publish video</span>
+                <span className="result-toggle-sub">Visible to feed</span>
               </div>
               <div className={`toggle${makePublic ? ' active' : ''}`} />
             </div>
             
-            <button className="btn-orange" onClick={handlePublish}>Сохранить тренировку</button>
-            <button className="btn-ghost" onClick={() => setPhase('idle')}>Отмена</button>
+            <button className="btn-orange" onClick={handlePublish}>Save workout</button>
+            <button className="btn-ghost" onClick={() => setPhase('idle')}>Cancel</button>
           </div>
         )}
 
