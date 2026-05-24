@@ -1,17 +1,70 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import {
+  apiRegister, apiLogin, apiLogout,
+  apiGetProfile, apiUploadAvatar,
+  apiToggleFollow,
+  apiSubmitWorkout, apiGetMyWorkouts, apiToggleLike,
+  apiGlobalFeed,
+  apiLeaderboardGlobal, apiLeaderboardFriends,
+} from '../api';
 
 const AuthContext = createContext(null);
+
+function saveSession(token, user) {
+  localStorage.setItem('pushapp_token', token);
+  localStorage.setItem('pushapp_user', JSON.stringify(user));
+}
+
+function clearSession() {
+  localStorage.removeItem('pushapp_token');
+  localStorage.removeItem('pushapp_user');
+}
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState(() => localStorage.getItem('pushapp_theme') || 'dark');
+  const [theme, setTheme] = useState(
+    () => localStorage.getItem('pushapp_theme') || 'dark'
+  );
 
-  useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
   useEffect(() => {
-    const saved = localStorage.getItem('pushapp_current_user');
-    if (saved) setCurrentUser(JSON.parse(saved));
-    setLoading(false);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  // При старте — если есть токен, восстанавливаем сессию
+  useEffect(() => {
+    const token = localStorage.getItem('pushapp_token');
+    const cached = localStorage.getItem('pushapp_user');
+
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
+    // Сразу показываем из кеша, не ждём сервер
+    if (cached) {
+      try {
+        setCurrentUser(JSON.parse(cached));
+      } catch {}
+    }
+
+    // Фоновое обновление профиля
+    apiGetProfile()
+      .then(p => {
+        const base = cached ? JSON.parse(cached) : {};
+        const merged = { ...base, ...p };
+        setCurrentUser(merged);
+        localStorage.setItem('pushapp_user', JSON.stringify(merged));
+      })
+      .catch(err => {
+        // 401 — токен протух, разлогиниваем
+        if (err.status === 401 || (err.message && err.message.includes('401'))) {
+          clearSession();
+          setCurrentUser(null);
+        }
+        // другие ошибки (сеть и т.д.) — оставляем кеш
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   function toggleTheme() {
@@ -20,157 +73,216 @@ export function AuthProvider({ children }) {
     localStorage.setItem('pushapp_theme', next);
   }
 
-  function getUsers() { return JSON.parse(localStorage.getItem('pushapp_users') || '[]'); }
-  function saveUsers(users) { localStorage.setItem('pushapp_users', JSON.stringify(users)); }
-
-  function register(username, email, password) {
-    const users = getUsers();
-    if (users.find(u => u.username.toLowerCase() === username.toLowerCase()))
-      return { error: 'Username already taken' };
-    if (users.find(u => u.email && u.email.toLowerCase() === email.toLowerCase()))
-      return { error: 'Email already registered' };
-    const newUser = {
-      id: Date.now().toString(), username, email, password, avatar: null,
-      stats: { totalPushups: 0, maxPushups: 0, longestStreak: 0, currentStreak: 0, likes: 0 },
-      workouts: [], followers: [], following: [], showStats: true,
-    };
-    users.push(newUser);
-    saveUsers(users);
-    setCurrentUser(newUser);
-    localStorage.setItem('pushapp_current_user', JSON.stringify(newUser));
-    return { success: true };
-  }
-
-  function login(username, password) {
-    const users = getUsers();
-    const user = users.find(u => u.username === username && u.password === password);
-    if (!user) return { error: 'Incorrect username or password' };
-    setCurrentUser(user);
-    localStorage.setItem('pushapp_current_user', JSON.stringify(user));
-    return { success: true };
-  }
-
-  function logout() { setCurrentUser(null); localStorage.removeItem('pushapp_current_user'); }
-
-  function updateUser(updates) {
-    const users = getUsers();
-    const idx = users.findIndex(u => u.id === currentUser.id);
-    if (idx === -1) return;
-    const updated = { ...users[idx], ...updates };
-    users[idx] = updated;
-    saveUsers(users);
-    setCurrentUser(updated);
-    localStorage.setItem('pushapp_current_user', JSON.stringify(updated));
-    return updated;
-  }
-
-  function getUserById(id) { return getUsers().find(u => u.id === id) || null; }
-  function getAllUsers() { return getUsers(); }
-
-  function follow(toUserId) {
-    const users = getUsers();
-    const meIdx = users.findIndex(u => u.id === currentUser.id);
-    const toIdx = users.findIndex(u => u.id === toUserId);
-    if (meIdx === -1 || toIdx === -1) return;
-    if (!users[meIdx].following.includes(toUserId))
-      users[meIdx] = { ...users[meIdx], following: [...users[meIdx].following, toUserId] };
-    if (!users[toIdx].followers.includes(currentUser.id))
-      users[toIdx] = { ...users[toIdx], followers: [...users[toIdx].followers, currentUser.id] };
-    saveUsers(users);
-    updateUser(users[meIdx]);
-  }
-
-  function unfollow(toUserId) {
-    const users = getUsers();
-    const meIdx = users.findIndex(u => u.id === currentUser.id);
-    const toIdx = users.findIndex(u => u.id === toUserId);
-    if (meIdx === -1 || toIdx === -1) return;
-    users[meIdx] = { ...users[meIdx], following: users[meIdx].following.filter(id => id !== toUserId) };
-    users[toIdx] = { ...users[toIdx], followers: users[toIdx].followers.filter(id => id !== currentUser.id) };
-    saveUsers(users);
-    updateUser(users[meIdx]);
-  }
-
-  function isFollowing(userId) { return (currentUser?.following || []).includes(userId); }
-
-  function addWorkout(pushupCount, videoUrl, isPublic) {
-    const users = getUsers();
-    const meIdx = users.findIndex(u => u.id === currentUser.id);
-    const userStats = users[meIdx]?.stats || {};
-    const allWorkouts = JSON.parse(localStorage.getItem('pushapp_workouts') || '[]');
-    const fmt = d => { const x = new Date(d); return `${String(x.getDate()).padStart(2,'0')}.${String(x.getMonth()+1).padStart(2,'0')}.${x.getFullYear()}`; };
-    const today = fmt(Date.now());
-    const yesterday = fmt(Date.now() - 86400000);
-    const myWorkouts = allWorkouts.filter(w => w.userId === currentUser.id);
-    const workedToday = myWorkouts.some(w => fmt(w.timestamp) === today);
-    const workedYesterday = myWorkouts.some(w => fmt(w.timestamp) === yesterday);
-    let currentStreak = userStats.currentStreak || 0;
-    if (!workedToday) currentStreak = workedYesterday ? currentStreak + 1 : 1;
-    const longestStreak = Math.max(userStats.longestStreak || 0, currentStreak);
-    const newTotal = (userStats.totalPushups || 0) + pushupCount;
-    const maxPushups = Math.max(userStats.maxPushups || 0, pushupCount);
-
-    const workout = {
-      id: Date.now().toString(), userId: currentUser.id, username: currentUser.username,
-      avatar: currentUser.avatar, pushups: pushupCount, videoUrl, isPublic,
-      timestamp: Date.now(), likes: 0, likedBy: [], streak: currentStreak,
-    };
-    allWorkouts.unshift(workout);
-    localStorage.setItem('pushapp_workouts', JSON.stringify(allWorkouts));
-
-    const dayData = currentUser.workouts || [];
-    const existing = dayData.find(d => d.date === today);
-    const newDayData = existing
-      ? dayData.map(d => d.date === today ? { ...d, count: d.count + pushupCount } : d)
-      : [...dayData, { date: today, count: pushupCount }].slice(-30);
-
-    updateUser({ stats: { ...userStats, totalPushups: newTotal, maxPushups, currentStreak, longestStreak }, workouts: newDayData });
-    return workout;
-  }
-
-  function getGlobalFeed() { return JSON.parse(localStorage.getItem('pushapp_workouts') || '[]'); }
-
-  function getFollowingFeed() {
-    const all = JSON.parse(localStorage.getItem('pushapp_workouts') || '[]');
-    const allowed = [...(currentUser?.following || []), currentUser?.id];
-    return all.filter(w => allowed.includes(w.userId));
-  }
-
-  function likeWorkout(workoutId) {
-    const workouts = JSON.parse(localStorage.getItem('pushapp_workouts') || '[]');
-    const idx = workouts.findIndex(w => w.id === workoutId);
-    if (idx === -1) return;
-    const w = workouts[idx];
-    const liked = w.likedBy.includes(currentUser.id);
-    workouts[idx] = liked
-      ? { ...w, likes: w.likes - 1, likedBy: w.likedBy.filter(id => id !== currentUser.id) }
-      : { ...w, likes: w.likes + 1, likedBy: [...w.likedBy, currentUser.id] };
-    localStorage.setItem('pushapp_workouts', JSON.stringify(workouts));
-    const users = getUsers();
-    const ownerIdx = users.findIndex(u => u.id === w.userId);
-    if (ownerIdx !== -1) {
-      const delta = liked ? -1 : 1;
-      users[ownerIdx] = { ...users[ownerIdx], stats: { ...users[ownerIdx].stats, likes: Math.max(0, (users[ownerIdx].stats?.likes || 0) + delta) } };
-      saveUsers(users);
-      if (w.userId === currentUser.id) {
-        const upd = { ...currentUser, stats: { ...currentUser.stats, likes: Math.max(0, (currentUser.stats?.likes || 0) + delta) } };
-        setCurrentUser(upd);
-        localStorage.setItem('pushapp_current_user', JSON.stringify(upd));
-      }
+  // ── Auth ────────────────────────────────────────────────────────────────────
+  async function register(username, email, password) {
+    try {
+      await apiRegister(username, email, password);
+      // После регистрации сразу логинимся
+      return await login(username, password);
+    } catch (e) {
+      return { error: e.message };
     }
-    return workouts[idx];
   }
 
-  function getLeaderboard() {
-    return [...getUsers()].sort((a, b) => (b.stats?.maxPushups || 0) - (a.stats?.maxPushups || 0));
+  async function login(username, password) {
+    try {
+      // apiLogin теперь возвращает строку токена напрямую
+      const token = await apiLogin(username, password);
+
+      // ВАЖНО: сначала сохраняем токен, потом делаем запрос профиля
+      localStorage.setItem('pushapp_token', token);
+
+      const profile = await apiGetProfile();
+      const user = { ...profile };
+      saveSession(token, user);
+      setCurrentUser(user);
+      return { success: true };
+    } catch (e) {
+      // Если что-то пошло не так — очищаем незаконченную сессию
+      clearSession();
+      return { error: e.message };
+    }
+  }
+
+  async function logout() {
+    try { await apiLogout(); } catch {}
+    clearSession();
+    setCurrentUser(null);
+  }
+
+  // ── Profile ─────────────────────────────────────────────────────────────────
+  async function refreshMyProfile() {
+    try {
+      const p = await apiGetProfile();
+      const updated = { ...currentUser, ...p };
+      setCurrentUser(updated);
+      localStorage.setItem('pushapp_user', JSON.stringify(updated));
+      return updated;
+    } catch (e) {
+      return currentUser;
+    }
+  }
+
+  async function uploadAvatar(file) {
+    try {
+      await apiUploadAvatar(file);
+      return await refreshMyProfile();
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+
+  async function getUserProfile(username) {
+    try {
+      return await apiGetProfile(username);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ── Social ──────────────────────────────────────────────────────────────────
+  async function toggleFollow(targetId) {
+    try {
+      const result = await apiToggleFollow(targetId);
+      await refreshMyProfile();
+      return result;
+    } catch (e) {
+      console.error('toggleFollow error:', e);
+    }
+  }
+
+  function follow(targetId) { return toggleFollow(targetId); }
+  function unfollow(targetId) { return toggleFollow(targetId); }
+
+  function isFollowing(userId) {
+    const ids = JSON.parse(localStorage.getItem('pushapp_following') || '[]');
+    return ids.includes(String(userId));
+  }
+
+  function setFollowingLocal(targetId, val) {
+    const ids = JSON.parse(localStorage.getItem('pushapp_following') || '[]');
+    const sid = String(targetId);
+    const next = val
+      ? [...new Set([...ids, sid])]
+      : ids.filter(i => i !== sid);
+    localStorage.setItem('pushapp_following', JSON.stringify(next));
+  }
+
+  // ── Workouts ────────────────────────────────────────────────────────────────
+  async function addWorkout(pushupCount, videoUrl, isPublic, durationSeconds) {
+    try {
+      const data = await apiSubmitWorkout(pushupCount, durationSeconds || 60);
+      const localWorkouts = JSON.parse(
+        localStorage.getItem('pushapp_local_workouts') || '[]'
+      );
+      localWorkouts.unshift({
+        serverId: data.id,
+        videoUrl: isPublic ? videoUrl : null,
+        isPublic,
+        timestamp: Date.now(),
+      });
+      localStorage.setItem(
+        'pushapp_local_workouts',
+        JSON.stringify(localWorkouts.slice(0, 50))
+      );
+      await refreshMyProfile();
+      return data;
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+
+  async function likeWorkout(workoutId) {
+    if (workoutId == null) {
+      console.warn('likeWorkout: workoutId is undefined, skipping');
+      return;
+    }
+    try {
+      return await apiToggleLike(Number(workoutId));
+    } catch (e) {
+      console.error('likeWorkout error:', e.message || e);
+    }
+  }
+
+  async function getMyWorkouts() {
+    try {
+      return await apiGetMyWorkouts();
+    } catch {
+      return [];
+    }
+  }
+
+  // ── Feed ────────────────────────────────────────────────────────────────────
+  async function getGlobalFeed() {
+    try {
+      const items = await apiGlobalFeed();
+      const local = JSON.parse(
+        localStorage.getItem('pushapp_local_workouts') || '[]'
+      );
+      return (items || []).map(w => {
+        const id = w.id ?? w.workout_id ?? null;
+        const loc = local.find(l => l.serverId === id);
+        return {
+          ...w,
+          id,
+          userId: w.user_id,
+          username: w.username || `user_${w.user_id}`,
+          avatar: w.profile_image_url || null,
+          pushups: w.total_pushups,
+          likes: w.likes_count,
+          likedBy: w.liked_by || [],
+          timestamp: w.created_at ? new Date(w.created_at).getTime() : Date.now(),
+          streak: w.current_streak || 0,
+          videoUrl: loc?.videoUrl || null,
+          isPublic: loc ? loc.isPublic : false,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  async function getFollowingFeed() {
+    const all = await getGlobalFeed();
+    const ids = JSON.parse(localStorage.getItem('pushapp_following') || '[]');
+    const allowed = [...ids, String(currentUser?.id)];
+    return all.filter(w => allowed.includes(String(w.user_id)));
+  }
+
+  // ── Leaderboard ─────────────────────────────────────────────────────────────
+  async function getLeaderboard() {
+    try {
+      const data = await apiLeaderboardGlobal();
+      return (data || []).map(u => ({
+        id: u.user_id,
+        username: u.username,
+        stats: {
+          totalPushups: u.total_pushups,
+          maxPushups: u.best_single_workout,
+        },
+        avatar: null,
+        following: [],
+        followers: [],
+        workouts: [],
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  async function getAllUsers() {
+    return await getLeaderboard();
   }
 
   return (
     <AuthContext.Provider value={{
       currentUser, loading, theme, toggleTheme,
-      register, login, logout, updateUser, getUserById, getAllUsers,
-      addWorkout, getGlobalFeed, getFollowingFeed, likeWorkout,
-      follow, unfollow, isFollowing, getLeaderboard,
+      register, login, logout,
+      refreshMyProfile, uploadAvatar, getUserProfile,
+      follow, unfollow, isFollowing, toggleFollow, setFollowingLocal,
+      addWorkout, likeWorkout, getMyWorkouts,
+      getGlobalFeed, getFollowingFeed,
+      getLeaderboard, getAllUsers,
     }}>
       {children}
     </AuthContext.Provider>

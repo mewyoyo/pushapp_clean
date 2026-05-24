@@ -1,99 +1,100 @@
-import React, { useState, useMemo } from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import './Search.scss';
 
 function MiniProfileModal({ user, onClose }) {
-  const { currentUser, follow, unfollow, isFollowing, getAllUsers } = useAuth();
+  const { currentUser, getUserProfile, toggleFollow, setFollowingLocal, isFollowing } = useAuth();
+  const [profile, setProfile] = useState(null);
   const [following, setFollowing] = useState(isFollowing(user.id));
-  const allUsers = getAllUsers();
-  const freshUser = allUsers.find(u => u.id === user.id) || user;
-  const workoutData = (freshUser.workouts || []).map(d => ({ ...d, name: d.date.slice(0, 5) }));
-  const isMe = user.id === currentUser?.id;
+  const isMe = String(user.id) === String(currentUser?.id);
 
-  function handleFollow() {
-    if (following) { unfollow(user.id); setFollowing(false); }
-    else { follow(user.id); setFollowing(true); }
+  useEffect(() => {
+    getUserProfile(user.username).then(p => p && setProfile(p));
+  }, [user.username]);
+
+  async function handleFollow() {
+    await toggleFollow(user.id);
+    const next = !following;
+    setFollowing(next);
+    setFollowingLocal(user.id, next);
   }
 
+  const p = profile;
   return (
     <div className="search-modal-overlay" onClick={onClose}>
       <div className="search-modal" onClick={e => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>✕</button>
-        <div className="smodal-avatar">
-          {freshUser.avatar ? <img src={freshUser.avatar} alt="" /> : <span>{freshUser.username[0].toUpperCase()}</span>}
-        </div>
-        <div className="smodal-name">{freshUser.username}</div>
-        <div className="smodal-follow-counts">
-          <span><b>{(freshUser.following || []).length}</b> following</span>
-          <span><b>{(freshUser.followers || []).length}</b> followers</span>
-        </div>
-        {!isMe && (
-          <button className={`btn-orange${following ? ' outline' : ''}`} style={{ width: '100%', marginBottom: 16 }} onClick={handleFollow}>
-            {following ? 'Unfollow' : 'Follow'}
-          </button>
-        )}
-        <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 8 }}>
-          {[
-            { label: 'Push-ups', value: freshUser.stats?.totalPushups || 0 },
-            { label: 'Best set', value: freshUser.stats?.maxPushups || 0 },
-            { label: 'Likes', value: freshUser.stats?.likes || 0 },
-          ].map(s => (
-            <div key={s.label} className="stat-card">
-              <div className="stat-label">{s.label}</div>
-              <div className="stat-value">{s.value}</div>
-            </div>
-          ))}
-        </div>
-        <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 16 }}>
-          {[
-            { label: 'Streak', value: freshUser.stats?.currentStreak || 0 },
-            { label: 'Best streak', value: freshUser.stats?.longestStreak || 0 },
-            { label: 'Followers', value: (freshUser.followers || []).length },
-          ].map(s => (
-            <div key={s.label} className="stat-card">
-              <div className="stat-label">{s.label}</div>
-              <div className="stat-value">{s.value}</div>
-            </div>
-          ))}
-        </div>
-        {workoutData.length > 0 && (
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={120}>
-              <AreaChart data={workoutData}>
-                <defs>
-                  <linearGradient id="gradSearch" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#e85d26" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#e85d26" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="name" tick={{ fill: '#888', fontSize: 9 }} axisLine={false} tickLine={false} />
-                <YAxis hide />
-                <Tooltip contentStyle={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }} />
-                <Area type="monotone" dataKey="count" stroke="#e85d26" strokeWidth={2} fill="url(#gradSearch)" dot={{ fill: '#e85d26', r: 2 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+        {!p
+          ? <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)' }}>Loading...</div>
+          : <>
+              <div className="smodal-avatar">
+                {p.profile_image_url ? <img src={p.profile_image_url} alt="" /> : <span>{p.username[0].toUpperCase()}</span>}
+              </div>
+              <div className="smodal-name">{p.username}</div>
+              <div className="smodal-follow-counts">
+                <span><b>{p.following_count || 0}</b> following</span>
+                <span><b>{p.followers_count || 0}</b> followers</span>
+              </div>
+              {!isMe && (
+                <button className={`btn-orange${following ? ' outline' : ''}`} style={{ width: '100%', marginBottom: 16 }} onClick={handleFollow}>
+                  {following ? 'Unfollow' : 'Follow'}
+                </button>
+              )}
+              <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 8 }}>
+                {[
+                  { label: 'Push-ups', value: p.total_pushups || 0 },
+                  { label: 'Best set', value: p.best_single_workout || 0 },
+                  { label: 'Likes', value: p.total_likes_received || 0 },
+                ].map(s => (
+                  <div key={s.label} className="stat-card">
+                    <div className="stat-label">{s.label}</div>
+                    <div className="stat-value">{s.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+                {[
+                  { label: 'Streak', value: p.current_streak || 0 },
+                  { label: 'Followers', value: p.followers_count || 0 },
+                  { label: 'Following', value: p.following_count || 0 },
+                ].map(s => (
+                  <div key={s.label} className="stat-card">
+                    <div className="stat-label">{s.label}</div>
+                    <div className="stat-value">{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+        }
       </div>
     </div>
   );
 }
 
 export default function SearchPage() {
-  const { getAllUsers, getLeaderboard } = useAuth();
+  const { getLeaderboard } = useAuth();
   const [query, setQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
 
-  const leaderboard = useMemo(() => getLeaderboard(), [getAllUsers()]);
+  useEffect(() => {
+    getLeaderboard().then(setLeaderboard);
+  }, []);
+
+  useEffect(() => {
+    if (!query.trim()) { setSearchResults([]); return; }
+    setSearching(true);
+    const q = query.toLowerCase();
+    // Client-side filter from leaderboard
+    const results = leaderboard.filter(u => u.username.toLowerCase().includes(q));
+    setSearchResults(results);
+    setSearching(false);
+  }, [query, leaderboard]);
+
   const top3 = leaderboard.slice(0, 3);
   const rest = leaderboard.slice(3, 9);
-
-  const searchResults = useMemo(() => {
-    if (!query.trim()) return [];
-    const q = query.toLowerCase().replace(/^@/, '');
-    return getAllUsers().filter(u => u.username.toLowerCase().includes(q));
-  }, [query]);
 
   return (
     <div className="search-page">
@@ -184,7 +185,7 @@ export default function SearchPage() {
             ))}
             {leaderboard.length === 0 && (
               <div style={{ textAlign: 'center', color: 'var(--text3)', padding: '32px 0', fontSize: 14 }}>
-                Sign up to make the leaderboard!
+                Loading leaderboard...
               </div>
             )}
           </div>

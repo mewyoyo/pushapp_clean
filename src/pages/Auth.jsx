@@ -9,19 +9,22 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     if (!username.trim() || !password.trim()) { setError('Fill in all fields'); return; }
+    setLoading(true);
+    let result;
     if (mode === 'register') {
-      if (!email.trim()) { setError('Enter your email'); return; }
-      const result = register(username.trim(), email.trim(), password);
-      if (result.error) setError(result.error);
+      if (!email.trim()) { setError('Enter your email'); setLoading(false); return; }
+      result = await register(username.trim(), email.trim(), password);
     } else {
-      const result = login(username.trim(), password);
-      if (result.error) setError(result.error);
+      result = await login(username.trim(), password);
     }
+    setLoading(false);
+    if (result?.error) setError(result.error);
   }
 
   return (
@@ -55,8 +58,8 @@ export default function AuthPage() {
             <input type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
           </div>
           {error && <div className="auth-error">{error}</div>}
-          <button type="submit" className="btn-orange full">
-            {mode === 'login' ? 'Log In' : 'Create Account'}
+          <button type="submit" className="btn-orange full" disabled={loading}>
+            {loading ? 'Please wait...' : mode === 'login' ? 'Log In' : 'Create Account'}
           </button>
         </form>
       </div>
