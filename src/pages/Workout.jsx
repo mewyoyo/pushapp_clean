@@ -343,7 +343,7 @@ export default function WorkoutPage() {
             <div className="workout-stats-overlay">
               <div className="stats-label">TOTAL PUSH-UPS:</div>
               <div className="stats-counter">{pushupCount}</div>
-              {streak > 0 && <div className="stats-streak">🔥 Streak: {streak} days</div>}
+              {(currentUser?.current_streak || 0) > 0 && <div className="stats-streak">🔥 Streak: {currentUser?.current_streak || 0} days</div>}
             </div>
             <div className="workout-actions-bottom">
               {phase === 'idle' && (
