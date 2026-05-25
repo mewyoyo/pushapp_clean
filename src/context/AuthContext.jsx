@@ -132,9 +132,9 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function getUserProfile(username) {
+  async function getUserProfile(userId) {
     try {
-      return await apiGetProfile(username);
+      return await apiGetProfile(userId);
     } catch (e) {
       return null;
     }

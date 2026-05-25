@@ -21,8 +21,8 @@ function UserProfileView({ username, userId, onBack }) {
   const isMe = String(userId) === String(currentUser?.id);
 
   useEffect(() => {
-    if (username) getUserProfile(username).then(p => p && setProfile(p));
-  }, [username]);
+    if (userId != null) getUserProfile(userId).then(p => p && setProfile(p));
+  }, [userId]);
 
   async function handleFollow() {
     await toggleFollow(userId);
@@ -327,6 +327,14 @@ export default function ProfilePage() {
           <div className="settings-item" onClick={toggleTheme} style={{ cursor: 'pointer' }}>
             <span>{theme === 'dark' ? '🌙 Dark mode' : '☀️ Light mode'}</span>
             <div className={`toggle${theme === 'dark' ? ' active' : ''}`} onClick={e => { e.stopPropagation(); toggleTheme(); }} />
+          </div>
+          <div className="settings-divider" />
+          <div className="settings-item" style={{ cursor: 'pointer' }} onClick={() => {
+            localStorage.removeItem('pushapp_local_workouts');
+            localStorage.removeItem('pushapp_liked_map');
+            alert('Local session data cleared.');
+          }}>
+            <span>🎬 Clear saved videos &amp; sessions</span>
           </div>
           <div className="settings-divider" />
           <div className="settings-item danger" style={{ cursor: 'pointer' }}>

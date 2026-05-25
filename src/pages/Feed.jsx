@@ -47,8 +47,9 @@ function UserProfileView({ username, userId, onBack }) {
   const isMe = String(userId) === String(currentUser?.id);
 
   useEffect(() => {
-    if (username) getUserProfile(username).then(p => p && setProfile(p));
-  }, [username]);
+    // Грузим по userId (правильный параметр по OpenAPI: ?user_id=)
+    if (userId != null) getUserProfile(userId).then(p => p && setProfile(p));
+  }, [userId]);
 
   async function handleFollow() {
     await toggleFollow(userId);

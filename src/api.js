@@ -74,9 +74,10 @@ export const apiLogin = async (username, password) => {
 
 export const apiLogout = () => req('POST', '/auth/logout');
 
-export const apiGetProfile = (username) =>
-  req('GET', username
-    ? `/users/profile?username=${encodeURIComponent(username)}`
+// user_id — число (из OpenAPI: ?user_id=int). Без аргумента — свой профиль.
+export const apiGetProfile = (userId) =>
+  req('GET', userId != null
+    ? `/users/profile?user_id=${userId}`
     : '/users/profile'
   );
 
@@ -111,7 +112,7 @@ export const apiLeaderboardGlobal = () => req('GET', '/leaderboard/global');
 export const apiLeaderboardFriends = () => req('GET', '/leaderboard/friends');
 
 export const apiGetFollowers = (userId) =>
-  req('GET', userId ? `/users/followers?id=${userId}` : '/users/followers');
+  req('GET', userId != null ? `/users/followers?user_id=${userId}` : '/users/followers');
 
 export const apiGetFollowing = (userId) =>
-  req('GET', userId ? `/users/following?id=${userId}` : '/users/following');
+  req('GET', userId != null ? `/users/following?user_id=${userId}` : '/users/following');
