@@ -109,3 +109,9 @@ export const apiGlobalFeed = () => req('GET', '/feed/global');
 export const apiLeaderboardGlobal = () => req('GET', '/leaderboard/global');
 
 export const apiLeaderboardFriends = () => req('GET', '/leaderboard/friends');
+
+export const apiGetFollowers = (userId) =>
+  req('GET', userId ? `/users/followers?id=${userId}` : '/users/followers');
+
+export const apiGetFollowing = (userId) =>
+  req('GET', userId ? `/users/following?id=${userId}` : '/users/following');
