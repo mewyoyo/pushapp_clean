@@ -405,10 +405,6 @@ export default function WorkoutPage() {
             <div className="workout-actions-bottom">
               {phase === 'idle' && (
                 <>
-                  <div className="upload-alt" onClick={() => fileRef.current.click()}>
-                    or upload a recorded video 📁
-                    <input ref={fileRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={handleFileUpload} />
-                  </div>
                   <button className="btn-start-workout" onClick={startWorkout} disabled={!cameraReady}>
                     START WORKOUT
                   </button>
